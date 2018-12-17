@@ -1,4 +1,5 @@
 const os = require('os')
+const net = require('net')
 const commands = require('system-basic-command')
 
 // 网段补全
@@ -204,7 +205,7 @@ function getAllIPBySubNet(args) {
     for (let i = 0; i < ipCount; i++) {
       const ipAddress = `${subNetSegmentCommon}.${hostSegmentStart + i}`
       // 注:去除本机地址 网关地址 网络地址 广播地址
-      if (ipAddress !== networkAddress && ipAddress !== broadcastAddress && ipAddress !== address) {
+      if (ipAddress !== networkAddress && ipAddress !== broadcastAddress && ipAddress !== address && ipAddress !== gateway) {
         availableIP.push(ipAddress)
       }
     }
@@ -222,7 +223,10 @@ function getAllIPBySubNet(args) {
   return { ...args, addressType, networkAddress, broadcastAddress, availableIP }
 }
 
-// 根据网卡名获取网卡所属网段以及网段下所有可用ip
+/**
+ * 根据网卡名获取网卡所属网段以及网段下所有可用ip
+ * @returns <Promise>
+ */
 const getAvailableIPByNetworkCardName = compose(
   getAllIPBySubNet,
   getSubNetByAddressAndNetMask,
@@ -230,4 +234,21 @@ const getAvailableIPByNetworkCardName = compose(
   getLocalNetworkCardsInfo,
 )
 
-getAvailableIPByNetworkCardName('en0').then(({availableIP}) => { console.log(availableIP) })
+/**
+ * 半开扫描
+ * TCP SYN 扫描
+ */
+function halfOpenScan (ip) {
+  net.createConnection(8088, '127.0.0.1', function () {
+
+  })
+}
+
+halfOpenScan('10.60.9.36')
+
+// getAvailableIPByNetworkCardName('en0').then(async ({gateway, availableIP}) => {
+//   const promiseList = availableIP.map(ip => {
+//     return halfOpenScan(ip)
+//   })
+//   await Promise.all(promiseList)
+// })
