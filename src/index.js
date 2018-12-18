@@ -1,5 +1,7 @@
 const os = require('os')
 const net = require('net')
+const raw = require('raw-socket')
+const crypto = require('crypto')
 const commands = require('system-basic-command')
 
 // 网段补全
@@ -238,17 +240,62 @@ const getAvailableIPByNetworkCardName = compose(
  * 半开扫描
  * TCP SYN 扫描
  */
-function halfOpenScan (ip) {
-  net.createConnection(8088, '127.0.0.1', function () {
-
-  })
+function arrayToBinary (arr) {
+  return '0x' + arr.map(i => {
+    const binary = Number(i).toString(16)
+    return binary.length < 2 ? 0 + binary : binary
+  }).join('')
 }
 
-halfOpenScan('10.60.9.36')
+function genFakeHeader (srcIp, dstIp, tcpPacketLength) {
+  const fakeHeader = new Buffer(12)
+  fakeHeader.fill(0)
+  fakeHeader.writeUInt32BE(arrayToBinary(srcIp.split('.')), 0)
+  fakeHeader.writeUInt32BE(arrayToBinary(dstIp.split('.')), 4)
+  fakeHeader.writeUInt8(6, 9)
+  fakeHeader.writeUInt16BE(tcpPacketLength, 10)
+  return fakeHeader
+}
 
-// getAvailableIPByNetworkCardName('en0').then(async ({gateway, availableIP}) => {
-//   const promiseList = availableIP.map(ip => {
-//     return halfOpenScan(ip)
-//   })
-//   await Promise.all(promiseList)
+function genSynPacket (srcIp, dstIp, srcPort, dstPort) {
+  const p = new Buffer('0000000000000000000000005002200000000000', 'hex')
+
+  // 随机4个字节填充序号(Sequence Number)
+  crypto.randomBytes(4).copy(p, 4)
+
+  p.writeUInt16BE(srcPort, 0)
+  p.writeUInt16BE(dstPort, 2)
+
+  const sum = raw.createChecksum(genFakeHeader(srcIp, dstIp, p.length), p)
+
+  p.writeUInt16BE(sum, 16)
+
+  return p
+}
+
+function sendSynPacket (srcIp, dstIp, srcPort, dstPort) {
+  const options = {
+    protocol: raw.Protocol.TCP,
+    addressFamily: raw.AddressFamily.IPv4,
+    generateChecksums: true,
+  }
+
+  const socket = raw.createSocket(options)
+
+  const buffer = new Buffer([
+    0x00, 0x00, // 源端口
+    0x00, 0x00, // 目标端口
+    0x00, 0x00, 0x00, 0x00, // 序号
+    0x00, 0x00, 0x00, 0x00, // 确认号
+
+  ])
+}
+
+// sendSynPacket('10.60.17.193', '10.60.17.184', 9527, 9527)
+sendSynPacket('127.0.0.1', '127.0.0.1', 8080, 8089)
+
+// getAvailableIPByNetworkCardName('en0').then(async ({address, gateway, networkAdd, availableIP}) => {
+//   console.log(address, gateway)
 // })
+
+
