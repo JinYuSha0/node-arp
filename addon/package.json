@@ -1,0 +1,12 @@
+{
+  "name": "node-socket",
+  "version": "1.0.0",
+  "description": "",
+  "main": "build/Releace/socket.node",
+  "author": "sjy",
+  "license": "ISC",
+  "gypfile": true,
+  "dependencies": {
+    "nan": "^2.12.1"
+  }
+}

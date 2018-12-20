@@ -1,7 +1,5 @@
 const os = require('os')
-const net = require('net')
 const raw = require('raw-socket')
-const crypto = require('crypto')
 const commands = require('system-basic-command')
 
 // 网段补全
@@ -237,65 +235,79 @@ const getAvailableIPByNetworkCardName = compose(
 )
 
 /**
- * 半开扫描
- * TCP SYN 扫描
+ * ping 检测主机是否在线
  */
-function arrayToBinary (arr) {
-  return '0x' + arr.map(i => {
-    const binary = Number(i).toString(16)
-    return binary.length < 2 ? 0 + binary : binary
-  }).join('')
+function pingTarget (socket, target, cb) {
+  return new Promise((resolve, reject) => {
+    try {
+      function onError(error) {
+        socket.removeListener('message', onMessage)
+        socket.removeListener('error', onError)
+        cb(error)
+        reject(error)
+      }
+
+      function onMessage(buffer, source) {
+        socket.removeListener('message', onMessage)
+        socket.removeListener('error', onError)
+        console.log(source)
+        cb(source)
+        resolve(source)
+      }
+
+      socket.on('error', onError)
+      socket.on('message', onMessage)
+
+      const buffer = new Buffer([
+        0x08, 0x00, 0x00, 0x00, 0x00, 0x01, 0x0a, 0x09,
+        0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68,
+        0x69, 0x6a, 0x6b, 0x6c, 0x6d, 0x6e, 0x6f, 0x70,
+        0x71, 0x72, 0x73, 0x74, 0x75, 0x76, 0x77, 0x61,
+        0x62, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68, 0x69
+      ])
+
+      raw.writeChecksum(buffer, 2, raw.createChecksum(buffer))
+
+      socket.send(buffer, 0, buffer.length, target, (error, bytes) => {
+        if (error) {
+          reject(error)
+        } else {
+          setTimeout(() => {
+            resolve()
+          }, 300)
+        }
+      })
+    } catch (err) {
+      reject(err)
+    }
+  })
 }
 
-function genFakeHeader (srcIp, dstIp, tcpPacketLength) {
-  const fakeHeader = new Buffer(12)
-  fakeHeader.fill(0)
-  fakeHeader.writeUInt32BE(arrayToBinary(srcIp.split('.')), 0)
-  fakeHeader.writeUInt32BE(arrayToBinary(dstIp.split('.')), 4)
-  fakeHeader.writeUInt8(6, 9)
-  fakeHeader.writeUInt16BE(tcpPacketLength, 10)
-  return fakeHeader
-}
-
-function genSynPacket (srcIp, dstIp, srcPort, dstPort) {
-  const p = new Buffer('0000000000000000000000005002200000000000', 'hex')
-
-  // 随机4个字节填充序号(Sequence Number)
-  crypto.randomBytes(4).copy(p, 4)
-
-  p.writeUInt16BE(srcPort, 0)
-  p.writeUInt16BE(dstPort, 2)
-
-  const sum = raw.createChecksum(genFakeHeader(srcIp, dstIp, p.length), p)
-
-  p.writeUInt16BE(sum, 16)
-
-  return p
-}
-
-function sendSynPacket (srcIp, dstIp, srcPort, dstPort) {
-  const options = {
-    protocol: raw.Protocol.TCP,
-    addressFamily: raw.AddressFamily.IPv4,
-    generateChecksums: true,
-  }
-
-  const socket = raw.createSocket(options)
-
-  const buffer = new Buffer([
-    0x00, 0x00, // 源端口
-    0x00, 0x00, // 目标端口
-    0x00, 0x00, 0x00, 0x00, // 序号
-    0x00, 0x00, 0x00, 0x00, // 确认号
-
-  ])
-}
-
-// sendSynPacket('10.60.17.193', '10.60.17.184', 9527, 9527)
-sendSynPacket('127.0.0.1', '127.0.0.1', 8080, 8089)
+const socket = raw.createSocket({ protocol: raw.Protocol.ICMP })
+pingTarget(socket, '127.0.0.1', () => {})
+pingTarget(socket, '127.0.0.1', () => {})
 
 // getAvailableIPByNetworkCardName('en0').then(async ({address, gateway, networkAdd, availableIP}) => {
-//   console.log(address, gateway)
+//   const onlineHost = new Set()
+//   const socket = raw.createSocket({ protocol: raw.Protocol.ICMP })
+//   const startTime = +new Date()
+//
+//   let promise = Promise.resolve()
+//   const allPromise = availableIP.map(ip => {
+//     promise = promise.then(() => pingTarget(socket, ip, (host) => {
+//       console.log(host)
+//       onlineHost.add(host)
+//     }))
+//
+//     return promise
+//   })
+//
+//   await Promise.all(allPromise)
+//
+//   const endTime = +new Date()
+//
+//   console.log(`在线人数:${onlineHost.size}`, `耗时:${endTime - startTime}ms`, `在线ip:${Array.from(onlineHost)}`)
+//   socket.close()
 // })
 
 
